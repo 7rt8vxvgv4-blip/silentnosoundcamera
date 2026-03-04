@@ -3,335 +3,302 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>High-Res Silent Camera</title>
+    <title>Pro Camera - Stack Mode v2</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body {
             background-color: #000;
             color: white;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             margin: 0;
             overflow: hidden;
             height: 100vh;
-            touch-action: manipulation;
+            touch-action: none; /* ブラウザのズームを防止 */
         }
-        #video-container {
-            position: relative;
-            width: 100%;
-            height: 100%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: #000;
+        #video-container { 
+            position: relative; 
+            width: 100%; 
+            height: 100%; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            background: #000; 
         }
-        video, #captured-image {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
-        .controls-overlay {
+        video { width: 100%; height: 100%; object-fit: cover; }
+        
+        /* フォーカスリング：タップした位置に出現 */
+        #focus-ring {
             position: absolute;
-            inset: 0;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-            padding: env(safe-area-inset-top) 20px env(safe-area-inset-bottom) 20px;
+            width: 70px; 
+            height: 70px;
+            border: 2px solid #fbbf24;
+            transform: translate(-50%, -50%) scale(1.5);
+            opacity: 0;
+            transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.2s;
             pointer-events: none;
-            z-index: 10;
+            z-index: 40;
         }
-        .controls-overlay * {
+        #focus-ring.active { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+
+        /* 左下のサムネイル */
+        #gallery-thumb {
+            position: absolute;
+            left: 20px;
+            bottom: calc(env(safe-area-inset-bottom) + 25px);
+            width: 55px;
+            height: 55px;
+            border-radius: 10px;
+            border: 2px solid rgba(255,255,255,0.8);
+            overflow: hidden;
+            background: #222;
+            z-index: 30;
+            transition: transform 0.1s;
             pointer-events: auto;
         }
-        .shutter-btn {
-            width: 72px;
-            height: 72px;
-            border-radius: 50%;
-            border: 4px solid white;
-            background: rgba(255, 255, 255, 0.2);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-        }
-        .shutter-inner {
-            width: 56px;
-            height: 56px;
-            background: white;
-            border-radius: 50%;
-            transition: transform 0.1s;
-        }
-        .shutter-btn:active .shutter-inner {
-            transform: scale(0.9);
-        }
-        .grid-line {
+        #gallery-thumb img { width: 100%; height: 100%; object-fit: cover; }
+        #gallery-thumb:active { transform: scale(0.9); }
+        #stack-count {
             position: absolute;
-            background: rgba(255, 255, 255, 0.3);
-            z-index: 5;
+            top: -5px; right: -5px;
+            background: #ef4444;
+            color: white;
+            font-size: 11px;
+            font-weight: bold;
+            padding: 1px 6px;
+            border-radius: 10px;
+            border: 1px solid black;
         }
-        .v-line { width: 1px; height: 100%; }
-        .h-line { height: 1px; width: 100%; }
-        
-        .exposure-slider {
-            appearance: none;
-            width: 180px;
-            height: 4px;
-            background: rgba(255,255,255,0.3);
-            border-radius: 2px;
-            transform: rotate(-90deg);
-            transform-origin: center;
+
+        /* シャッターボタン */
+        .shutter-btn { 
+            width: 76px; height: 76px; 
+            border-radius: 50%; 
+            border: 4px solid white; 
+            background: rgba(255,255,255,0.1); 
+            display: flex; align-items: center; justify-content: center;
+            pointer-events: auto;
         }
-        
-        #save-modal {
-            background: rgba(0,0,0,0.9);
-            z-index: 50;
+        .shutter-inner { 
+            width: 60px; height: 60px; 
+            background: white; 
+            border-radius: 50%; 
+            transition: transform 0.1s; 
         }
+        .shutter-btn:active .shutter-inner { transform: scale(0.85); }
+
+        /* ギャラリーモーダル */
+        #gallery-modal {
+            position: fixed;
+            inset: 0;
+            background: black;
+            z-index: 100;
+            display: none;
+            flex-direction: column;
+        }
+        .grid-container {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 2px;
+            overflow-y: auto;
+            padding: 2px;
+            flex-grow: 1;
+        }
+        .grid-item img { width: 100%; aspect-ratio: 1; object-fit: cover; }
     </style>
 </head>
 <body>
 
 <div id="video-container">
-    <!-- プレビュー映像 -->
     <video id="video" autoplay playsinline muted></video>
     
-    <!-- 撮影された写真の表示 -->
-    <img id="captured-image" class="hidden" alt="captured">
+    <div id="focus-ring"></div>
 
-    <!-- グリッド線 -->
-    <div id="grid" class="absolute inset-0 hidden pointer-events-none">
-        <div class="grid-line v-line" style="left: 33.33%;"></div>
-        <div class="grid-line v-line" style="left: 66.66%;"></div>
-        <div class="grid-line h-line" style="top: 33.33%;"></div>
-        <div class="grid-line h-line" style="top: 66.66%;"></div>
+    <div id="gallery-thumb" class="hidden">
+        <img id="thumb-img" src="">
+        <span id="stack-count">0</span>
     </div>
 
-    <!-- UIオーバーレイ -->
-    <div class="controls-overlay" id="ui-main">
+    <div class="absolute inset-0 flex flex-col justify-between p-6 pointer-events-none z-10">
         <div class="flex justify-between items-center mt-4">
-            <button id="switch-camera" class="p-3 bg-black/40 rounded-full">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21h5v-5"/></svg>
+            <button id="switch-camera" class="p-3 bg-black/40 rounded-full text-white pointer-events-auto">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21h5v-5"/></svg>
             </button>
-            <div class="flex gap-2">
-                <button id="toggle-grid" class="px-4 py-2 bg-black/40 rounded-full text-xs border border-white/20">GRID</button>
-                <button id="toggle-timer" class="px-4 py-2 bg-black/40 rounded-full text-xs border border-white/20">TIMER: OFF</button>
-            </div>
+            <div id="zoom-label" class="bg-black/60 px-4 py-1 rounded-full text-xs font-mono text-white">1.0x</div>
         </div>
 
-        <!-- 露出スライダー（右端） -->
-        <div class="absolute right-[-60px] top-1/2 -translate-y-1/2 flex flex-col items-center">
-            <input type="range" id="exposure" min="-2" max="2" step="0.1" value="0" class="exposure-slider">
-        </div>
-
-        <div class="flex flex-col items-center gap-6 mb-10">
-            <!-- ズーム選択 -->
-            <div id="zoom-controls" class="flex gap-6 bg-black/50 px-6 py-2 rounded-full border border-white/10 hidden">
-                <button onclick="setZoom(1)" class="text-sm font-bold w-8">1x</button>
-                <button onclick="setZoom(2)" class="text-sm font-bold w-8">2x</button>
-                <button onclick="setZoom(5)" class="text-sm font-bold w-8">5x</button>
-            </div>
-
-            <!-- シャッター -->
-            <div class="flex justify-center items-center w-full">
-                <div id="shutter" class="shutter-btn">
-                    <div class="shutter-inner"></div>
-                </div>
+        <div class="flex justify-center items-center mb-10">
+            <div id="shutter" class="shutter-btn">
+                <div class="shutter-inner"></div>
             </div>
         </div>
     </div>
+</div>
 
-    <!-- 撮影後メニュー -->
-    <div id="post-capture-ui" class="absolute bottom-0 left-0 right-0 p-8 flex justify-around items-center bg-gradient-to-t from-black/80 to-transparent hidden z-20">
-        <button id="cancel-btn" class="flex flex-col items-center gap-2">
-            <div class="w-14 h-14 bg-white/10 border border-white/30 rounded-full flex items-center justify-center">
-                <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-            </div>
-            <span class="text-xs">撮り直し</span>
-        </button>
-        
-        <div class="text-center px-4">
-            <p class="text-sm font-bold mb-1">高画質プレビュー</p>
-            <p class="text-[10px] text-gray-400">下のボタンで保存</p>
-        </div>
-
-        <button id="save-btn" class="flex flex-col items-center gap-2">
-            <div class="w-14 h-14 bg-white rounded-full flex items-center justify-center text-black">
-                <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            </div>
-            <span class="text-xs font-bold text-white">保存</span>
-        </button>
+<div id="gallery-modal">
+    <div class="p-4 flex justify-between items-center border-b border-white/10">
+        <button id="close-gallery-btn" class="text-blue-500 font-bold text-lg">完了</button>
+        <span class="font-bold">撮影済み</span>
+        <button id="batch-save" class="text-blue-500 font-bold text-lg">保存</button>
     </div>
-
-    <!-- カウントダウン表示 -->
-    <div id="countdown" class="absolute inset-0 flex items-center justify-center text-8xl font-bold pointer-events-none hidden z-30"></div>
+    <div id="gallery-grid" class="grid-container"></div>
+    <div class="p-6 bg-black flex justify-between items-center border-t border-white/10">
+        <button id="clear-all-btn" class="text-red-500">すべて消去</button>
+        <span id="total-count" class="text-gray-400 text-sm">0枚</span>
+    </div>
 </div>
 
 <canvas id="hidden-canvas" class="hidden"></canvas>
 
 <script>
     const video = document.getElementById('video');
-    const capturedImage = document.getElementById('captured-image');
     const canvas = document.getElementById('hidden-canvas');
-    const uiMain = document.getElementById('ui-main');
-    const postUi = document.getElementById('post-capture-ui');
     const shutter = document.getElementById('shutter');
-    const saveBtn = document.getElementById('save-btn');
-    const cancelBtn = document.getElementById('cancel-btn');
-    const switchBtn = document.getElementById('switch-camera');
-    const gridBtn = document.getElementById('toggle-grid');
-    const timerBtn = document.getElementById('toggle-timer');
-    const exposureSlider = document.getElementById('exposure');
-    const countdownEl = document.getElementById('countdown');
+    const galleryThumb = document.getElementById('gallery-thumb');
+    const thumbImg = document.getElementById('thumb-img');
+    const stackCountEl = document.getElementById('stack-count');
+    const galleryModal = document.getElementById('gallery-modal');
+    const galleryGrid = document.getElementById('gallery-grid');
+    const focusRing = document.getElementById('focus-ring');
 
+    let photoStack = []; 
     let currentStream = null;
-    let useFrontCamera = false;
-    let timerValue = 0;
     let videoTrack = null;
+    let currentZoom = 1;
+    let useFrontCamera = false;
 
+    // --- カメラ制御 ---
     async function startCamera() {
-        if (currentStream) {
-            currentStream.getTracks().forEach(t => t.stop());
-        }
-
-        const constraints = {
-            video: {
-                facingMode: useFrontCamera ? 'user' : 'environment',
-                width: { ideal: 4096 },
-                height: { ideal: 2160 }
-            },
-            audio: false
-        };
-
+        if (currentStream) currentStream.getTracks().forEach(t => t.stop());
         try {
-            currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+            currentStream = await navigator.mediaDevices.getUserMedia({
+                video: { 
+                    facingMode: useFrontCamera ? 'user' : 'environment', 
+                    width: { ideal: 3840 }, 
+                    height: { ideal: 2160 } 
+                }
+            });
             video.srcObject = currentStream;
             videoTrack = currentStream.getVideoTracks()[0];
-            
-            // ズーム設定の確認
-            const caps = videoTrack.getCapabilities();
-            if (caps.zoom) {
-                document.getElementById('zoom-controls').classList.remove('hidden');
-            }
-        } catch (err) {
-            console.error("Camera Error:", err);
-            alert("カメラを起動できません。ブラウザの設定で許可してください。");
-        }
+        } catch (e) { alert("カメラの起動に失敗しました。"); }
     }
 
-    function capture() {
-        if (timerValue > 0) {
-            let count = timerValue;
-            countdownEl.classList.remove('hidden');
-            countdownEl.innerText = count;
-            const timerId = setInterval(() => {
-                count--;
-                if (count <= 0) {
-                    clearInterval(timerId);
-                    countdownEl.classList.add('hidden');
-                    doCapture();
-                } else {
-                    countdownEl.innerText = count;
-                }
-            }, 1000);
-        } else {
-            doCapture();
-        }
-    }
-
-    function doCapture() {
-        // 解像度を落とさないようCanvasサイズを設定
+    // --- 撮影 ---
+    function takePhoto() {
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
         const ctx = canvas.getContext('2d');
-        
-        // 反転（フロントカメラの場合）
         if (useFrontCamera) {
-            ctx.translate(canvas.width, 0);
-            ctx.scale(-1, 1);
+            ctx.translate(canvas.width, 0); ctx.scale(-1, 1);
         }
-        
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         
-        // 画像として表示
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.98);
-        capturedImage.src = dataUrl;
-        
-        // 画面切り替え
-        video.classList.add('hidden');
-        capturedImage.classList.remove('hidden');
-        uiMain.classList.add('hidden');
-        postUi.classList.remove('hidden');
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+        photoStack.push(dataUrl);
+
+        // UI更新
+        galleryThumb.classList.remove('hidden');
+        thumbImg.src = dataUrl;
+        stackCountEl.innerText = photoStack.length;
+
+        // 画面フラッシュ演出
+        video.style.opacity = "0.3";
+        setTimeout(() => video.style.opacity = "1", 80);
     }
 
-    // 保存ボタンの強化
-    saveBtn.onclick = async () => {
-        try {
-            canvas.toBlob((blob) => {
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.style.display = 'none';
-                a.href = url;
-                a.download = `Photo_${new Date().getTime()}.jpg`;
-                document.body.appendChild(a);
-                a.click();
-                
-                // iOS Safari対策: 少し遅れてからURLを開放し、再度クリックを促すメッセージ
-                setTimeout(() => {
-                    document.body.removeChild(a);
-                    URL.revokeObjectURL(url);
-                }, 100);
-                
-                // 保存完了後にプレビューに戻す
-                setTimeout(reset, 500);
-            }, 'image/jpeg', 1.0);
-        } catch (e) {
-            // 万が一失敗した場合のフォールバック
-            alert("画像を長押しして保存してください");
-        }
-    };
+    // --- タップフォーカス (修正版) ---
+    video.parentElement.addEventListener('click', async (e) => {
+        // UI要素(ボタン、サムネイル、シャッター)がクリックされた場合はフォーカス処理をしない
+        if (e.target.closest('button, #gallery-thumb, #shutter')) return;
 
-    function reset() {
-        video.classList.remove('hidden');
-        capturedImage.classList.add('hidden');
-        uiMain.classList.remove('hidden');
-        postUi.classList.add('hidden');
-        capturedImage.src = '';
-    }
+        const rect = video.getBoundingClientRect();
+        const touchX = (e.clientX - rect.left) / rect.width;
+        const touchY = (e.clientY - rect.top) / rect.height;
 
-    cancelBtn.onclick = reset;
+        // フォーカスリング表示
+        focusRing.style.left = `${e.clientX}px`;
+        focusRing.style.top = `${e.clientY}px`;
+        focusRing.classList.remove('active');
+        void focusRing.offsetWidth; // アニメーション再トリガー
+        focusRing.classList.add('active');
+        setTimeout(() => focusRing.classList.remove('active'), 800);
 
-    switchBtn.onclick = () => {
-        useFrontCamera = !useFrontCamera;
-        startCamera();
-    };
-
-    gridBtn.onclick = () => {
-        const grid = document.getElementById('grid');
-        grid.classList.toggle('hidden');
-        gridBtn.classList.toggle('bg-yellow-500');
-    };
-
-    timerBtn.onclick = () => {
-        const options = [0, 3, 10];
-        timerValue = options[(options.indexOf(timerValue) + 1) % options.length];
-        timerBtn.innerText = timerValue === 0 ? "TIMER: OFF" : `TIMER: ${timerValue}S`;
-    };
-
-    exposureSlider.oninput = (e) => {
-        const val = parseFloat(e.target.value);
+        // カメラへの命令
         if (videoTrack && videoTrack.applyConstraints) {
-            videoTrack.applyConstraints({
-                advanced: [{ exposureCompensation: val }]
-            });
+            const caps = videoTrack.getCapabilities();
+            const settings = {};
+            
+            // フォーカスと露出のポイントを設定（対応ブラウザのみ）
+            if (caps.focusMode?.includes('continuous')) settings.focusMode = 'continuous';
+            if (caps.pointsOfInterest) settings.pointsOfInterest = [{x: touchX, y: touchY}];
+            if (caps.exposureMode?.includes('continuous')) settings.exposureMode = 'continuous';
+
+            try {
+                await videoTrack.applyConstraints({ advanced: [settings] });
+            } catch (err) { console.log("Focus not supported"); }
         }
-        video.style.filter = `brightness(${1 + val * 0.4})`;
+    });
+
+    // --- 各種ボタンイベント (stopPropagationでフォーカスと干渉させない) ---
+    shutter.onclick = (e) => { e.stopPropagation(); takePhoto(); };
+    
+    document.getElementById('switch-camera').onclick = (e) => { 
+        e.stopPropagation(); 
+        useFrontCamera = !useFrontCamera; 
+        startCamera(); 
     };
 
-    window.setZoom = (z) => {
-        if (videoTrack) {
-            videoTrack.applyConstraints({ advanced: [{ zoom: z }] });
+    galleryThumb.onclick = (e) => {
+        e.stopPropagation();
+        galleryGrid.innerHTML = '';
+        photoStack.forEach(src => {
+            const div = document.createElement('div');
+            div.className = 'grid-item';
+            div.innerHTML = `<img src="${src}">`;
+            galleryGrid.appendChild(div);
+        });
+        document.getElementById('total-count').innerText = `${photoStack.length}枚`;
+        galleryModal.style.display = 'flex';
+    };
+
+    document.getElementById('close-gallery-btn').onclick = () => galleryModal.style.display = 'none';
+
+    document.getElementById('clear-all-btn').onclick = () => {
+        if(confirm("すべて削除しますか？")) {
+            photoStack = [];
+            galleryThumb.classList.add('hidden');
+            galleryModal.style.display = 'none';
         }
     };
 
-    shutter.onclick = capture;
+    document.getElementById('batch-save').onclick = async () => {
+        for (let i = 0; i < photoStack.length; i++) {
+            const a = document.createElement('a');
+            a.href = photoStack[i];
+            a.download = `IMG_${Date.now()}_${i}.jpg`;
+            a.click();
+            await new Promise(r => setTimeout(r, 300));
+        }
+        alert("保存が完了しました");
+    };
+
+    // --- ピンチズーム ---
+    let initialDist = 0;
+    video.parentElement.addEventListener('touchstart', e => {
+        if (e.touches.length === 2) initialDist = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY);
+    });
+    video.parentElement.addEventListener('touchmove', e => {
+        if (e.touches.length === 2 && initialDist) {
+            const dist = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY);
+            const delta = (dist - initialDist) / 100;
+            const caps = videoTrack.getCapabilities();
+            if (caps.zoom) {
+                currentZoom = Math.min(Math.max(currentZoom + delta, caps.minZoom), caps.maxZoom);
+                videoTrack.applyConstraints({ advanced: [{ zoom: currentZoom }] });
+                document.getElementById('zoom-label').innerText = `${currentZoom.toFixed(1)}x`;
+            }
+            initialDist = dist;
+        }
+    });
 
     window.onload = startCamera;
 </script>
