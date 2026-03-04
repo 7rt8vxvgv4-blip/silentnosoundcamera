@@ -3,114 +3,41 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Pro Camera - Stack Mode v2</title>
+    <title>Pro Camera - Full Features</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body {
-            background-color: #000;
-            color: white;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            margin: 0;
-            overflow: hidden;
-            height: 100vh;
-            touch-action: none; /* ブラウザのズームを防止 */
-        }
-        #video-container { 
-            position: relative; 
-            width: 100%; 
-            height: 100%; 
-            display: flex; 
-            align-items: center; 
-            justify-content: center; 
-            background: #000; 
-        }
-        video { width: 100%; height: 100%; object-fit: cover; }
+        body { background-color: #000; color: white; margin: 0; overflow: hidden; height: 100vh; touch-action: none; font-family: -apple-system, sans-serif; }
+        #video-container { position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: #000; overflow: hidden; }
+        video { width: 100%; height: 100%; object-fit: cover; transition: transform 0.1s ease-out; }
         
-        /* フォーカスリング：タップした位置に出現 */
-        #focus-ring {
-            position: absolute;
-            width: 70px; 
-            height: 70px;
-            border: 2px solid #fbbf24;
-            transform: translate(-50%, -50%) scale(1.5);
-            opacity: 0;
-            transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.2s;
-            pointer-events: none;
-            z-index: 40;
-        }
+        #focus-ring { position: absolute; width: 70px; height: 70px; border: 2px solid #fbbf24; transform: translate(-50%, -50%) scale(1.5); opacity: 0; transition: transform 0.2s, opacity 0.2s; pointer-events: none; z-index: 40; }
         #focus-ring.active { transform: translate(-50%, -50%) scale(1); opacity: 1; }
 
-        /* 左下のサムネイル */
-        #gallery-thumb {
-            position: absolute;
-            left: 20px;
-            bottom: calc(env(safe-area-inset-bottom) + 25px);
-            width: 55px;
-            height: 55px;
-            border-radius: 10px;
-            border: 2px solid rgba(255,255,255,0.8);
-            overflow: hidden;
-            background: #222;
-            z-index: 30;
-            transition: transform 0.1s;
-            pointer-events: auto;
-        }
+        #gallery-thumb { position: absolute; left: 20px; bottom: calc(env(safe-area-inset-bottom) + 25px); width: 55px; height: 55px; border-radius: 10px; border: 2px solid white; overflow: hidden; background: #222; z-index: 30; pointer-events: auto; }
         #gallery-thumb img { width: 100%; height: 100%; object-fit: cover; }
-        #gallery-thumb:active { transform: scale(0.9); }
-        #stack-count {
-            position: absolute;
-            top: -5px; right: -5px;
-            background: #ef4444;
-            color: white;
-            font-size: 11px;
-            font-weight: bold;
-            padding: 1px 6px;
-            border-radius: 10px;
-            border: 1px solid black;
-        }
+        #stack-count { position: absolute; top: -5px; right: -5px; background: #ef4444; color: white; font-size: 11px; font-weight: bold; padding: 1px 6px; border-radius: 10px; border: 1px solid black; }
 
-        /* シャッターボタン */
-        .shutter-btn { 
-            width: 76px; height: 76px; 
-            border-radius: 50%; 
-            border: 4px solid white; 
-            background: rgba(255,255,255,0.1); 
-            display: flex; align-items: center; justify-content: center;
-            pointer-events: auto;
-        }
-        .shutter-inner { 
-            width: 60px; height: 60px; 
-            background: white; 
-            border-radius: 50%; 
-            transition: transform 0.1s; 
-        }
+        .shutter-btn { width: 76px; height: 76px; border-radius: 50%; border: 4px solid white; background: rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: center; pointer-events: auto; cursor: pointer; }
+        .shutter-inner { width: 60px; height: 60px; background: white; border-radius: 50%; transition: transform 0.1s; }
         .shutter-btn:active .shutter-inner { transform: scale(0.85); }
 
-        /* ギャラリーモーダル */
-        #gallery-modal {
-            position: fixed;
-            inset: 0;
-            background: black;
-            z-index: 100;
-            display: none;
-            flex-direction: column;
-        }
-        .grid-container {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 2px;
-            overflow-y: auto;
-            padding: 2px;
-            flex-grow: 1;
-        }
-        .grid-item img { width: 100%; aspect-ratio: 1; object-fit: cover; }
+        /* モーダル全般 */
+        .modal { position: fixed; inset: 0; background: black; z-index: 100; display: none; flex-direction: column; }
+        
+        /* ギャラリーグリッド */
+        .grid-container { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; overflow-y: auto; flex-grow: 1; padding: 2px; align-content: start;}
+        .grid-item { position: relative; aspect-ratio: 1; background: #111; cursor: pointer; }
+        .grid-item img { width: 100%; height: 100%; object-fit: cover; }
+        
+        /* フルスクリーンビューア */
+        #fullscreen-viewer { z-index: 200; }
+        #fullscreen-img { width: 100%; height: 100%; object-fit: contain; }
     </style>
 </head>
 <body>
 
 <div id="video-container">
     <video id="video" autoplay playsinline muted></video>
-    
     <div id="focus-ring"></div>
 
     <div id="gallery-thumb" class="hidden">
@@ -120,30 +47,52 @@
 
     <div class="absolute inset-0 flex flex-col justify-between p-6 pointer-events-none z-10">
         <div class="flex justify-between items-center mt-4">
-            <button id="switch-camera" class="p-3 bg-black/40 rounded-full text-white pointer-events-auto">
+            <button id="switch-camera" class="p-3 bg-black/50 rounded-full text-white pointer-events-auto">
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21h5v-5"/></svg>
             </button>
             <div id="zoom-label" class="bg-black/60 px-4 py-1 rounded-full text-xs font-mono text-white">1.0x</div>
         </div>
-
         <div class="flex justify-center items-center mb-10">
-            <div id="shutter" class="shutter-btn">
-                <div class="shutter-inner"></div>
-            </div>
+            <div id="shutter" class="shutter-btn"><div class="shutter-inner"></div></div>
         </div>
     </div>
 </div>
 
-<div id="gallery-modal">
-    <div class="p-4 flex justify-between items-center border-b border-white/10">
-        <button id="close-gallery-btn" class="text-blue-500 font-bold text-lg">完了</button>
+<div id="gallery-modal" class="modal">
+    <div class="p-4 flex justify-between items-center border-b border-white/20 bg-gray-900">
+        <button id="close-gallery-btn" class="text-white font-bold">閉じる</button>
         <span class="font-bold">撮影済み</span>
-        <button id="batch-save" class="text-blue-500 font-bold text-lg">保存</button>
+        <button id="toggle-select-btn" class="text-blue-400 font-bold">選択</button>
     </div>
     <div id="gallery-grid" class="grid-container"></div>
-    <div class="p-6 bg-black flex justify-between items-center border-t border-white/10">
+    
+    <div id="normal-action-bar" class="p-6 bg-gray-900 flex justify-between items-center border-t border-white/20">
         <button id="clear-all-btn" class="text-red-500">すべて消去</button>
         <span id="total-count" class="text-gray-400 text-sm">0枚</span>
+        <button id="save-all-btn" class="text-blue-400 font-bold">すべて保存</button>
+    </div>
+
+    <div id="select-action-bar" class="p-6 bg-gray-900 flex justify-between items-center border-t border-white/20 hidden">
+        <button id="delete-selected-btn" class="text-red-500">削除</button>
+        <span id="selected-count" class="text-white font-bold">0枚選択中</span>
+        <button id="save-selected-btn" class="text-blue-400 font-bold">保存</button>
+    </div>
+</div>
+
+<div id="fullscreen-viewer" class="modal">
+    <div class="p-4 flex justify-between items-center bg-black/80 absolute top-0 w-full z-10">
+        <button id="close-fullscreen-btn" class="text-white font-bold flex items-center gap-1">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 18-6-6 6-6"/></svg>戻る
+        </button>
+    </div>
+    <div class="flex-grow flex items-center justify-center bg-black">
+        <img id="fullscreen-img" src="">
+    </div>
+    <div class="p-6 bg-black/80 flex justify-between absolute bottom-0 w-full">
+        <button id="fs-delete-btn" class="text-red-500">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+        </button>
+        <button id="fs-save-btn" class="text-blue-400 font-bold">保存</button>
     </div>
 </div>
 
@@ -151,34 +100,44 @@
 
 <script>
     const video = document.getElementById('video');
+    const videoContainer = document.getElementById('video-container');
     const canvas = document.getElementById('hidden-canvas');
-    const shutter = document.getElementById('shutter');
-    const galleryThumb = document.getElementById('gallery-thumb');
-    const thumbImg = document.getElementById('thumb-img');
-    const stackCountEl = document.getElementById('stack-count');
-    const galleryModal = document.getElementById('gallery-modal');
-    const galleryGrid = document.getElementById('gallery-grid');
-    const focusRing = document.getElementById('focus-ring');
-
+    const ctx = canvas.getContext('2d');
+    
     let photoStack = []; 
     let currentStream = null;
     let videoTrack = null;
-    let currentZoom = 1;
     let useFrontCamera = false;
+
+    // ズーム関連
+    let currentZoom = 1;
+    let maxZoom = 5;
+    let initialDist = 0;
+    let nativeZoomSupported = false;
+
+    // ギャラリー関連
+    let isSelectMode = false;
+    let selectedIndices = new Set();
+    let currentFsIndex = -1;
 
     // --- カメラ制御 ---
     async function startCamera() {
         if (currentStream) currentStream.getTracks().forEach(t => t.stop());
         try {
             currentStream = await navigator.mediaDevices.getUserMedia({
-                video: { 
-                    facingMode: useFrontCamera ? 'user' : 'environment', 
-                    width: { ideal: 3840 }, 
-                    height: { ideal: 2160 } 
-                }
+                video: { facingMode: useFrontCamera ? 'user' : 'environment', width: { ideal: 3840 }, height: { ideal: 2160 } }
             });
             video.srcObject = currentStream;
             videoTrack = currentStream.getVideoTracks()[0];
+            
+            // ネイティブズームの対応確認
+            const caps = videoTrack.getCapabilities();
+            nativeZoomSupported = !!caps.zoom;
+            if (nativeZoomSupported) maxZoom = caps.maxZoom;
+            
+            currentZoom = 1;
+            video.style.transform = `scale(1)`;
+            document.getElementById('zoom-label').innerText = `1.0x`;
         } catch (e) { alert("カメラの起動に失敗しました。"); }
     }
 
@@ -186,119 +145,204 @@
     function takePhoto() {
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
-        const ctx = canvas.getContext('2d');
+        
         if (useFrontCamera) {
             ctx.translate(canvas.width, 0); ctx.scale(-1, 1);
         }
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+        // iPhone向け: デジタルズーム（CSS拡大）時の画像切り抜き処理
+        if (!nativeZoomSupported && currentZoom > 1) {
+            const sw = canvas.width / currentZoom;
+            const sh = canvas.height / currentZoom;
+            const sx = (canvas.width - sw) / 2;
+            const sy = (canvas.height - sh) / 2;
+            ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+        } else {
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        }
         
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
-        photoStack.push(dataUrl);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
+        photoStack.unshift(dataUrl); // 最新を先頭に追加
 
-        // UI更新
-        galleryThumb.classList.remove('hidden');
-        thumbImg.src = dataUrl;
-        stackCountEl.innerText = photoStack.length;
+        updateThumbUI();
 
-        // 画面フラッシュ演出
         video.style.opacity = "0.3";
         setTimeout(() => video.style.opacity = "1", 80);
     }
 
-    // --- タップフォーカス (修正版) ---
-    video.parentElement.addEventListener('click', async (e) => {
-        // UI要素(ボタン、サムネイル、シャッター)がクリックされた場合はフォーカス処理をしない
+    function updateThumbUI() {
+        const thumb = document.getElementById('gallery-thumb');
+        if (photoStack.length > 0) {
+            thumb.classList.remove('hidden');
+            document.getElementById('thumb-img').src = photoStack[0];
+            document.getElementById('stack-count').innerText = photoStack.length;
+        } else {
+            thumb.classList.add('hidden');
+        }
+    }
+
+    // --- ピンチズーム ---
+    videoContainer.addEventListener('touchstart', e => {
+        if (e.touches.length === 2) {
+            e.preventDefault();
+            initialDist = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY);
+        }
+    }, { passive: false });
+
+    videoContainer.addEventListener('touchmove', e => {
+        if (e.touches.length === 2 && initialDist) {
+            e.preventDefault();
+            const dist = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY);
+            const delta = (dist - initialDist) / 100;
+            currentZoom = Math.min(Math.max(currentZoom + delta, 1), maxZoom);
+            
+            if (nativeZoomSupported) {
+                videoTrack.applyConstraints({ advanced: [{ zoom: currentZoom }] }).catch(()=>{});
+            } else {
+                // ネイティブ非対応(iPhone等)はCSSでデジタルズーム
+                video.style.transform = `scale(${currentZoom})`;
+            }
+            
+            document.getElementById('zoom-label').innerText = `${currentZoom.toFixed(1)}x`;
+            initialDist = dist;
+        }
+    }, { passive: false });
+
+    // --- タップフォーカス ---
+    videoContainer.addEventListener('click', async (e) => {
         if (e.target.closest('button, #gallery-thumb, #shutter')) return;
 
         const rect = video.getBoundingClientRect();
         const touchX = (e.clientX - rect.left) / rect.width;
         const touchY = (e.clientY - rect.top) / rect.height;
 
-        // フォーカスリング表示
-        focusRing.style.left = `${e.clientX}px`;
-        focusRing.style.top = `${e.clientY}px`;
-        focusRing.classList.remove('active');
-        void focusRing.offsetWidth; // アニメーション再トリガー
-        focusRing.classList.add('active');
+        const focusRing = document.getElementById('focus-ring');
+        focusRing.style.left = `${e.clientX}px`; focusRing.style.top = `${e.clientY}px`;
+        focusRing.classList.remove('active'); void focusRing.offsetWidth; focusRing.classList.add('active');
         setTimeout(() => focusRing.classList.remove('active'), 800);
 
-        // カメラへの命令
         if (videoTrack && videoTrack.applyConstraints) {
-            const caps = videoTrack.getCapabilities();
-            const settings = {};
-            
-            // フォーカスと露出のポイントを設定（対応ブラウザのみ）
-            if (caps.focusMode?.includes('continuous')) settings.focusMode = 'continuous';
-            if (caps.pointsOfInterest) settings.pointsOfInterest = [{x: touchX, y: touchY}];
-            if (caps.exposureMode?.includes('continuous')) settings.exposureMode = 'continuous';
-
-            try {
-                await videoTrack.applyConstraints({ advanced: [settings] });
-            } catch (err) { console.log("Focus not supported"); }
+            try { await videoTrack.applyConstraints({ advanced: [{ pointsOfInterest: [{x: touchX, y: touchY}] }] }); } 
+            catch (err) { }
         }
     });
 
-    // --- 各種ボタンイベント (stopPropagationでフォーカスと干渉させない) ---
-    shutter.onclick = (e) => { e.stopPropagation(); takePhoto(); };
-    
-    document.getElementById('switch-camera').onclick = (e) => { 
-        e.stopPropagation(); 
-        useFrontCamera = !useFrontCamera; 
-        startCamera(); 
+    // --- UIイベント制御 ---
+    document.getElementById('shutter').onclick = (e) => { e.stopPropagation(); takePhoto(); };
+    document.getElementById('switch-camera').onclick = (e) => { e.stopPropagation(); useFrontCamera = !useFrontCamera; startCamera(); };
+
+    // --- ギャラリー・選択モード処理 ---
+    document.getElementById('gallery-thumb').onclick = (e) => {
+        e.stopPropagation();
+        isSelectMode = false;
+        selectedIndices.clear();
+        renderGallery();
+        document.getElementById('gallery-modal').style.display = 'flex';
     };
 
-    galleryThumb.onclick = (e) => {
-        e.stopPropagation();
-        galleryGrid.innerHTML = '';
-        photoStack.forEach(src => {
+    function renderGallery() {
+        const grid = document.getElementById('gallery-grid');
+        grid.innerHTML = '';
+        photoStack.forEach((src, index) => {
             const div = document.createElement('div');
             div.className = 'grid-item';
-            div.innerHTML = `<img src="${src}">`;
-            galleryGrid.appendChild(div);
+            
+            let overlay = '';
+            if (isSelectMode) {
+                const isSel = selectedIndices.has(index);
+                overlay = `
+                    <div class="absolute inset-0 border-4 pointer-events-none ${isSel ? 'border-blue-500 bg-blue-500/20' : 'border-transparent'}"></div>
+                    ${isSel ? '<div class="absolute bottom-1 right-1 bg-blue-500 rounded-full w-6 h-6 flex items-center justify-center text-white text-sm">✓</div>' : ''}
+                `;
+            }
+
+            div.innerHTML = `<img src="${src}">${overlay}`;
+            div.onclick = () => {
+                if (isSelectMode) {
+                    selectedIndices.has(index) ? selectedIndices.delete(index) : selectedIndices.add(index);
+                    renderGallery();
+                } else {
+                    openFullscreen(index);
+                }
+            };
+            grid.appendChild(div);
         });
+
+        // UI切り替え
+        document.getElementById('toggle-select-btn').innerText = isSelectMode ? 'キャンセル' : '選択';
+        document.getElementById('normal-action-bar').classList.toggle('hidden', isSelectMode);
+        document.getElementById('select-action-bar').classList.toggle('hidden', !isSelectMode);
         document.getElementById('total-count').innerText = `${photoStack.length}枚`;
-        galleryModal.style.display = 'flex';
+        document.getElementById('selected-count').innerText = `${selectedIndices.size}枚選択中`;
+    }
+
+    document.getElementById('toggle-select-btn').onclick = () => {
+        isSelectMode = !isSelectMode;
+        selectedIndices.clear();
+        renderGallery();
     };
 
-    document.getElementById('close-gallery-btn').onclick = () => galleryModal.style.display = 'none';
+    document.getElementById('close-gallery-btn').onclick = () => document.getElementById('gallery-modal').style.display = 'none';
 
-    document.getElementById('clear-all-btn').onclick = () => {
-        if(confirm("すべて削除しますか？")) {
-            photoStack = [];
-            galleryThumb.classList.add('hidden');
-            galleryModal.style.display = 'none';
-        }
-    };
-
-    document.getElementById('batch-save').onclick = async () => {
-        for (let i = 0; i < photoStack.length; i++) {
+    // 一括保存・選択保存処理
+    async function downloadPhotos(indices) {
+        if(indices.length === 0) return;
+        for (let i of indices) {
             const a = document.createElement('a');
             a.href = photoStack[i];
             a.download = `IMG_${Date.now()}_${i}.jpg`;
             a.click();
             await new Promise(r => setTimeout(r, 300));
         }
-        alert("保存が完了しました");
+        alert(`${indices.length}枚の保存をリクエストしました。`);
+        isSelectMode = false;
+        renderGallery();
+    }
+
+    document.getElementById('save-all-btn').onclick = () => downloadPhotos(photoStack.map((_, i) => i));
+    document.getElementById('save-selected-btn').onclick = () => downloadPhotos(Array.from(selectedIndices));
+
+    // 削除処理
+    document.getElementById('clear-all-btn').onclick = () => {
+        if(confirm("すべて削除しますか？")) { photoStack = []; updateThumbUI(); renderGallery(); }
+    };
+    document.getElementById('delete-selected-btn').onclick = () => {
+        if(confirm("選択した写真を削除しますか？")) {
+            photoStack = photoStack.filter((_, i) => !selectedIndices.has(i));
+            selectedIndices.clear();
+            isSelectMode = false;
+            updateThumbUI();
+            renderGallery();
+        }
     };
 
-    // --- ピンチズーム ---
-    let initialDist = 0;
-    video.parentElement.addEventListener('touchstart', e => {
-        if (e.touches.length === 2) initialDist = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY);
-    });
-    video.parentElement.addEventListener('touchmove', e => {
-        if (e.touches.length === 2 && initialDist) {
-            const dist = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY);
-            const delta = (dist - initialDist) / 100;
-            const caps = videoTrack.getCapabilities();
-            if (caps.zoom) {
-                currentZoom = Math.min(Math.max(currentZoom + delta, caps.minZoom), caps.maxZoom);
-                videoTrack.applyConstraints({ advanced: [{ zoom: currentZoom }] });
-                document.getElementById('zoom-label').innerText = `${currentZoom.toFixed(1)}x`;
-            }
-            initialDist = dist;
+    // --- フルスクリーンビューア処理 ---
+    function openFullscreen(index) {
+        currentFsIndex = index;
+        document.getElementById('fullscreen-img').src = photoStack[index];
+        document.getElementById('fullscreen-viewer').style.display = 'flex';
+    }
+
+    document.getElementById('close-fullscreen-btn').onclick = () => {
+        document.getElementById('fullscreen-viewer').style.display = 'none';
+        currentFsIndex = -1;
+    };
+
+    document.getElementById('fs-save-btn').onclick = () => {
+        const a = document.createElement('a');
+        a.href = photoStack[currentFsIndex];
+        a.download = `IMG_${Date.now()}.jpg`;
+        a.click();
+    };
+
+    document.getElementById('fs-delete-btn').onclick = () => {
+        if(confirm("この写真を削除しますか？")) {
+            photoStack.splice(currentFsIndex, 1);
+            updateThumbUI();
+            document.getElementById('fullscreen-viewer').style.display = 'none';
+            renderGallery();
         }
-    });
+    };
 
     window.onload = startCamera;
 </script>
