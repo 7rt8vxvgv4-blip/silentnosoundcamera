@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>High-Res Silent Camera</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background-color: #000;
+            color: white;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            overflow: hidden;
+            height: 100vh;
+            touch-action: manipulation;
+        }
+        #video-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #000;
+        }
+        video, #captured-image {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .controls-overlay {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: env(safe-area-inset-top) 20px env(safe-area-inset-bottom) 20px;
+            pointer-events: none;
+            z-index: 10;
+        }
+        .controls-overlay * {
+            pointer-events: auto;
+        }
+        .shutter-btn {
+            width: 72px;
+            height: 72px;
+            border-radius: 50%;
+            border: 4px solid white;
+            background: rgba(255, 255, 255, 0.2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+        }
+        .shutter-inner {
+            width: 56px;
+            height: 56px;
+            background: white;
+            border-radius: 50%;
+            transition: transform 0.1s;
+        }
+        .shutter-btn:active .shutter-inner {
+            transform: scale(0.9);
+        }
+        .grid-line {
+            position: absolute;
+            background: rgba(255, 255, 255, 0.3);
+            z-index: 5;
+        }
+        .v-line { width: 1px; height: 100%; }
+        .h-line { height: 1px; width: 100%; }
+        
+        .exposure-slider {
+            appearance: none;
+            width: 180px;
+            height: 4px;
+            background: rgba(255,255,255,0.3);
+            border-radius: 2px;
+            transform: rotate(-90deg);
+            transform-origin: center;
+        }
+        
+        #save-modal {
+            background: rgba(0,0,0,0.9);
+            z-index: 50;
+        }
+    </style>
+</head>
+<body>
+
+<div id="video-container">
+    <!-- プレビュー映像 -->
+    <video id="video" autoplay playsinline muted></video>
+    
+    <!-- 撮影された写真の表示 -->
+    <img id="captured-image" class="hidden" alt="captured">
+
+    <!-- グリッド線 -->
+    <div id="grid" class="absolute inset-0 hidden pointer-events-none">
+        <div class="grid-line v-line" style="left: 33.33%;"></div>
+        <div class="grid-line v-line" style="left: 66.66%;"></div>
+        <div class="grid-line h-line" style="top: 33.33%;"></div>
+        <div class="grid-line h-line" style="top: 66.66%;"></div>
+    </div>
+
+    <!-- UIオーバーレイ -->
+    <div class="controls-overlay" id="ui-main">
+        <div class="flex justify-between items-center mt-4">
+            <button id="switch-camera" class="p-3 bg-black/40 rounded-full">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21h5v-5"/></svg>
+            </button>
+            <div class="flex gap-2">
+                <button id="toggle-grid" class="px-4 py-2 bg-black/40 rounded-full text-xs border border-white/20">GRID</button>
+                <button id="toggle-timer" class="px-4 py-2 bg-black/40 rounded-full text-xs border border-white/20">TIMER: OFF</button>
+            </div>
+        </div>
+
+        <!-- 露出スライダー（右端） -->
+        <div class="absolute right-[-60px] top-1/2 -translate-y-1/2 flex flex-col items-center">
+            <input type="range" id="exposure" min="-2" max="2" step="0.1" value="0" class="exposure-slider">
+        </div>
+
+        <div class="flex flex-col items-center gap-6 mb-10">
+            <!-- ズーム選択 -->
+            <div id="zoom-controls" class="flex gap-6 bg-black/50 px-6 py-2 rounded-full border border-white/10 hidden">
+                <button onclick="setZoom(1)" class="text-sm font-bold w-8">1x</button>
+                <button onclick="setZoom(2)" class="text-sm font-bold w-8">2x</button>
+                <button onclick="setZoom(5)" class="text-sm font-bold w-8">5x</button>
+            </div>
+
+            <!-- シャッター -->
+            <div class="flex justify-center items-center w-full">
+                <div id="shutter" class="shutter-btn">
+                    <div class="shutter-inner"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 撮影後メニュー -->
+    <div id="post-capture-ui" class="absolute bottom-0 left-0 right-0 p-8 flex justify-around items-center bg-gradient-to-t from-black/80 to-transparent hidden z-20">
+        <button id="cancel-btn" class="flex flex-col items-center gap-2">
+            <div class="w-14 h-14 bg-white/10 border border-white/30 rounded-full flex items-center justify-center">
+                <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </div>
+            <span class="text-xs">撮り直し</span>
+        </button>
+        
+        <div class="text-center px-4">
+            <p class="text-sm font-bold mb-1">高画質プレビュー</p>
+            <p class="text-[10px] text-gray-400">下のボタンで保存</p>
+        </div>
+
+        <button id="save-btn" class="flex flex-col items-center gap-2">
+            <div class="w-14 h-14 bg-white rounded-full flex items-center justify-center text-black">
+                <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            </div>
+            <span class="text-xs font-bold text-white">保存</span>
+        </button>
+    </div>
+
+    <!-- カウントダウン表示 -->
+    <div id="countdown" class="absolute inset-0 flex items-center justify-center text-8xl font-bold pointer-events-none hidden z-30"></div>
+</div>
+
+<canvas id="hidden-canvas" class="hidden"></canvas>
+
+<script>
+    const video = document.getElementById('video');
+    const capturedImage = document.getElementById('captured-image');
+    const canvas = document.getElementById('hidden-canvas');
+    const uiMain = document.getElementById('ui-main');
+    const postUi = document.getElementById('post-capture-ui');
+    const shutter = document.getElementById('shutter');
+    const saveBtn = document.getElementById('save-btn');
+    const cancelBtn = document.getElementById('cancel-btn');
+    const switchBtn = document.getElementById('switch-camera');
+    const gridBtn = document.getElementById('toggle-grid');
+    const timerBtn = document.getElementById('toggle-timer');
+    const exposureSlider = document.getElementById('exposure');
+    const countdownEl = document.getElementById('countdown');
+
+    let currentStream = null;
+    let useFrontCamera = false;
+    let timerValue = 0;
+    let videoTrack = null;
+
+    async function startCamera() {
+        if (currentStream) {
+            currentStream.getTracks().forEach(t => t.stop());
+        }
+
+        const constraints = {
+            video: {
+                facingMode: useFrontCamera ? 'user' : 'environment',
+                width: { ideal: 4096 },
+                height: { ideal: 2160 }
+            },
+            audio: false
+        };
+
+        try {
+            currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+            video.srcObject = currentStream;
+            videoTrack = currentStream.getVideoTracks()[0];
+            
+            // ズーム設定の確認
+            const caps = videoTrack.getCapabilities();
+            if (caps.zoom) {
+                document.getElementById('zoom-controls').classList.remove('hidden');
+            }
+        } catch (err) {
+            console.error("Camera Error:", err);
+            alert("カメラを起動できません。ブラウザの設定で許可してください。");
+        }
+    }
+
+    function capture() {
+        if (timerValue > 0) {
+            let count = timerValue;
+            countdownEl.classList.remove('hidden');
+            countdownEl.innerText = count;
+            const timerId = setInterval(() => {
+                count--;
+                if (count <= 0) {
+                    clearInterval(timerId);
+                    countdownEl.classList.add('hidden');
+                    doCapture();
+                } else {
+                    countdownEl.innerText = count;
+                }
+            }, 1000);
+        } else {
+            doCapture();
+        }
+    }
+
+    function doCapture() {
+        // 解像度を落とさないようCanvasサイズを設定
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext('2d');
+        
+        // 反転（フロントカメラの場合）
+        if (useFrontCamera) {
+            ctx.translate(canvas.width, 0);
+            ctx.scale(-1, 1);
+        }
+        
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        
+        // 画像として表示
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.98);
+        capturedImage.src = dataUrl;
+        
+        // 画面切り替え
+        video.classList.add('hidden');
+        capturedImage.classList.remove('hidden');
+        uiMain.classList.add('hidden');
+        postUi.classList.remove('hidden');
+    }
+
+    // 保存ボタンの強化
+    saveBtn.onclick = async () => {
+        try {
+            canvas.toBlob((blob) => {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                a.download = `Photo_${new Date().getTime()}.jpg`;
+                document.body.appendChild(a);
+                a.click();
+                
+                // iOS Safari対策: 少し遅れてからURLを開放し、再度クリックを促すメッセージ
+                setTimeout(() => {
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                }, 100);
+                
+                // 保存完了後にプレビューに戻す
+                setTimeout(reset, 500);
+            }, 'image/jpeg', 1.0);
+        } catch (e) {
+            // 万が一失敗した場合のフォールバック
+            alert("画像を長押しして保存してください");
+        }
+    };
+
+    function reset() {
+        video.classList.remove('hidden');
+        capturedImage.classList.add('hidden');
+        uiMain.classList.remove('hidden');
+        postUi.classList.add('hidden');
+        capturedImage.src = '';
+    }
+
+    cancelBtn.onclick = reset;
+
+    switchBtn.onclick = () => {
+        useFrontCamera = !useFrontCamera;
+        startCamera();
+    };
+
+    gridBtn.onclick = () => {
+        const grid = document.getElementById('grid');
+        grid.classList.toggle('hidden');
+        gridBtn.classList.toggle('bg-yellow-500');
+    };
+
+    timerBtn.onclick = () => {
+        const options = [0, 3, 10];
+        timerValue = options[(options.indexOf(timerValue) + 1) % options.length];
+        timerBtn.innerText = timerValue === 0 ? "TIMER: OFF" : `TIMER: ${timerValue}S`;
+    };
+
+    exposureSlider.oninput = (e) => {
+        const val = parseFloat(e.target.value);
+        if (videoTrack && videoTrack.applyConstraints) {
+            videoTrack.applyConstraints({
+                advanced: [{ exposureCompensation: val }]
+            });
+        }
+        video.style.filter = `brightness(${1 + val * 0.4})`;
+    };
+
+    window.setZoom = (z) => {
+        if (videoTrack) {
+            videoTrack.applyConstraints({ advanced: [{ zoom: z }] });
+        }
+    };
+
+    shutter.onclick = capture;
+
+    window.onload = startCamera;
+</script>
+
+</body>
+</html>
