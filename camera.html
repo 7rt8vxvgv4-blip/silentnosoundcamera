@@ -3,41 +3,44 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Pro Camera Ultra - Fix 1</title>
+    <title>Pro Camera Ultra - Final Fix</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        /* 画面スクロールやはみ出しを完全に防ぐ */
         * { box-sizing: border-box; }
-        body, html { margin: 0; padding: 0; width: 100%; height: 100%; background-color: #000; overflow: hidden; touch-action: none; position: fixed; font-family: -apple-system, sans-serif; color: white; }
+        /* 画面スクロールを完全に禁止し、スマホ特有のバー（dvh）を考慮 */
+        body, html { margin: 0; padding: 0; width: 100%; height: 100dvh; background-color: #000; overflow: hidden; touch-action: none; position: fixed; font-family: -apple-system, sans-serif; color: white; }
         
-        /* ビデオの全画面固定 */
         #video-container { position: absolute; inset: 0; width: 100%; height: 100%; background: #000; z-index: 1; }
         video { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; transform-origin: center center; }
         
-        /* フラッシュ演出 */
         #flash { position: absolute; inset: 0; background: white; opacity: 0; pointer-events: none; z-index: 50; }
 
-        /* UIの重なり（ビデオの上に配置） */
         .ui-layer { position: absolute; inset: 0; z-index: 10; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; }
         .ui-top { padding: max(env(safe-area-inset-top), 24px) 24px 0 24px; pointer-events: auto; display: flex; justify-content: space-between; align-items: flex-start; }
         .ui-bottom { padding: 0 24px max(env(safe-area-inset-bottom), 32px) 24px; pointer-events: auto; display: flex; justify-content: space-between; align-items: center; }
 
-        /* シャッターボタン */
         .shutter-btn { width: 80px; height: 80px; border-radius: 50%; border: 4px solid white; display: flex; align-items: center; justify-content: center; background: transparent; }
         .shutter-inner { width: 64px; height: 64px; background: white; border-radius: 50%; transition: transform 0.05s; }
         .shutter-btn:active .shutter-inner { transform: scale(0.9); }
 
         /* 左下スタック */
+        #gallery-wrapper { pointer-events: auto; transition: opacity 0.2s; }
         #gallery-thumb { width: 56px; height: 56px; border-radius: 12px; border: 2px solid white; overflow: hidden; background: #222; position: relative; }
         #gallery-thumb img { width: 100%; height: 100%; object-fit: cover; }
         #stack-count { position: absolute; top: -6px; right: -6px; background: #ef4444; color: white; font-size: 11px; font-weight: bold; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; border-radius: 50%; border: 2px solid black; }
 
-        /* モーダル（ギャラリー） */
-        .modal { position: absolute; inset: 0; background: black; z-index: 100; display: none; flex-direction: column; pointer-events: auto; }
-        .grid-container { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; overflow-y: auto; flex-grow: 1; padding: 2px; align-content: start; }
+        /* モーダル共通設定 (表示崩れ防止) */
+        .modal { position: absolute; inset: 0; width: 100%; height: 100dvh; background: #000; z-index: 100; display: none; flex-direction: column; pointer-events: auto; overflow: hidden; }
+        
+        /* ギャラリーグリッド (重なり防止の要) */
+        .grid-container { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 2px; align-content: start; }
         .grid-item { position: relative; aspect-ratio: 1; background: #111; overflow: hidden; }
         .grid-item img { width: 100%; height: 100%; object-fit: cover; }
         .check-icon { position: absolute; bottom: 6px; right: 6px; width: 24px; height: 24px; background: #3b82f6; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 14px; border: 2px solid white; }
+
+        /* フルスクリーンプレビュー用 */
+        #preview-modal { z-index: 200; background: #000; }
+        #preview-img { width: 100%; height: 100%; object-fit: contain; }
     </style>
 </head>
 <body>
@@ -56,21 +59,19 @@
     </div>
     
     <div class="ui-bottom">
-        <div id="gallery-wrapper" class="opacity-0 pointer-events-none transition-opacity duration-200">
+        <div id="gallery-wrapper" class="opacity-0 pointer-events-none">
             <div id="gallery-thumb">
                 <img id="thumb-img" src="">
                 <span id="stack-count">0</span>
             </div>
         </div>
-        
         <button id="shutter" class="shutter-btn"><div class="shutter-inner"></div></button>
-        
         <div style="width: 56px"></div>
     </div>
 </div>
 
 <div id="gallery-modal" class="modal">
-    <div class="pt-12 pb-4 px-4 flex justify-between items-center bg-zinc-900 border-b border-white/10">
+    <div class="pt-12 pb-4 px-4 flex justify-between items-center bg-zinc-900 border-b border-white/10 shrink-0">
         <button id="close-gallery" class="text-blue-400 font-bold text-lg w-16 text-left">完了</button>
         <div class="flex flex-col items-center">
             <span class="font-bold">ギャラリー</span>
@@ -79,16 +80,31 @@
         <button id="toggle-select" class="text-blue-400 text-lg w-16 text-right">選択</button>
     </div>
     
-    <div id="select-bar" class="bg-zinc-800 px-4 py-2 flex justify-between items-center hidden">
+    <div id="select-bar" class="bg-zinc-800 px-4 py-2 flex justify-between items-center hidden shrink-0">
         <button id="select-all-btn" class="text-blue-400 text-sm">全選択</button>
         <span class="text-xs text-gray-400">タップして選択</span>
     </div>
 
     <div id="gallery-grid" class="grid-container"></div>
     
-    <div id="gallery-footer" class="pb-8 pt-4 px-8 bg-zinc-900 flex justify-between items-center border-t border-white/10 hidden">
+    <div id="gallery-footer" class="pb-8 pt-4 px-8 bg-zinc-900 flex justify-between items-center border-t border-white/10 hidden shrink-0">
         <button id="delete-btn" class="text-red-500 font-bold text-lg">削除</button>
         <button id="share-btn" class="text-blue-400 font-bold text-lg">共有・保存</button>
+    </div>
+</div>
+
+<div id="preview-modal" class="modal">
+    <div class="pt-12 pb-4 px-4 flex justify-between items-center bg-black/80 absolute top-0 w-full z-10 shrink-0">
+        <button id="close-preview" class="text-white font-bold flex items-center gap-1">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 18-6-6 6-6"/></svg>戻る
+        </button>
+    </div>
+    <div class="flex-grow flex items-center justify-center h-full w-full">
+        <img id="preview-img" src="">
+    </div>
+    <div class="pb-8 pt-4 px-8 bg-black/80 flex justify-between items-center absolute bottom-0 w-full z-10 shrink-0">
+        <button id="preview-delete-btn" class="text-red-500 font-bold">削除</button>
+        <button id="preview-share-btn" class="text-blue-400 font-bold text-lg">共有・保存</button>
     </div>
 </div>
 
@@ -103,36 +119,28 @@
     let photoStack = []; 
     let stream = null;
     let front = false;
-    
-    // ズーム変数
     let zoom = 1.0;
     let startDist = 0;
     
-    // ギャラリー変数
+    // ギャラリー・プレビュー用変数
     let isSelect = false;
     let selected = new Set();
+    let currentPreviewIndex = -1;
 
-    // 1. カメラ起動 (解像度設定をiPhoneの縦横比に最適化)
+    // カメラ起動
     async function init() {
         if (stream) stream.getTracks().forEach(t => t.stop());
         try {
             stream = await navigator.mediaDevices.getUserMedia({
-                video: { 
-                    facingMode: front ? 'user' : 'environment',
-                    width: { ideal: 2560 },
-                    height: { ideal: 1440 }
-                },
+                video: { facingMode: front ? 'user' : 'environment', width: { ideal: 2560 }, height: { ideal: 1440 } },
                 audio: false
             });
             video.srcObject = stream;
-        } catch (e) {
-            alert("カメラを起動できません。");
-        }
+        } catch (e) { alert("カメラを起動できません。"); }
     }
 
-    // 2. ピンチズーム（画面全体で判定）
+    // ピンチズーム
     const touchArea = document.getElementById('video-container');
-    
     touchArea.addEventListener('touchstart', e => {
         if (e.touches.length === 2) {
             e.preventDefault();
@@ -144,7 +152,6 @@
         if (e.touches.length === 2 && startDist > 0) {
             e.preventDefault();
             const dist = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY);
-            // ズーム感度を少しマイルドに調整
             zoom = Math.min(Math.max(zoom + (dist - startDist) * 0.01, 1), 8);
             video.style.transform = `scale(${zoom})`;
             document.getElementById('zoom-label').innerText = zoom.toFixed(1) + 'x';
@@ -152,9 +159,8 @@
         }
     }, { passive: false });
 
-    // 3. 撮影
+    // 撮影
     async function snap() {
-        // フラッシュ
         flash.style.opacity = 1;
         setTimeout(() => flash.style.opacity = 0, 50);
 
@@ -162,7 +168,6 @@
         canvas.height = video.videoHeight;
         if (front) { ctx.translate(canvas.width, 0); ctx.scale(-1, 1); }
         
-        // ズームの切り抜き
         const sw = canvas.width / zoom;
         const sh = canvas.height / zoom;
         const sx = (canvas.width - sw) / 2;
@@ -174,16 +179,21 @@
         updateThumb();
     }
 
+    // ★修正: サムネイルの確実な更新・非表示処理
     function updateThumb() {
         const wrapper = document.getElementById('gallery-wrapper');
         if (photoStack.length > 0) {
             wrapper.classList.remove('opacity-0', 'pointer-events-none');
             document.getElementById('thumb-img').src = photoStack[0];
             document.getElementById('stack-count').innerText = photoStack.length;
+        } else {
+            // 写真が0枚になったらサムネイルを完全に隠す
+            wrapper.classList.add('opacity-0', 'pointer-events-none');
+            document.getElementById('thumb-img').src = '';
         }
     }
 
-    // 4. 共有シート（保存）
+    // 共有シート（保存）
     async function openShareSheet(indices) {
         if (indices.length === 0) return;
         try {
@@ -194,19 +204,19 @@
             }
             if (navigator.share && navigator.canShare({ files })) {
                 await navigator.share({ files });
-                // 共有が完了したら選択を解除
+                // 完了したら選択解除
                 isSelect = false;
                 selected.clear();
                 renderGallery();
             } else {
-                alert("このブラウザは共有機能に対応していません。");
+                alert("このブラウザは共有機能に対応していません。画像を長押しして保存してください。");
             }
         } catch (e) {
             if (e.name !== 'AbortError') console.error(e);
         }
     }
 
-    // 5. ギャラリーの描画
+    // ギャラリーの描画
     function renderGallery() {
         const grid = document.getElementById('gallery-grid');
         grid.innerHTML = '';
@@ -227,17 +237,17 @@
 
             div.onclick = () => {
                 if (isSelect) {
+                    // 選択モード時はチェックをつける
                     isSel ? selected.delete(i) : selected.add(i);
                     renderGallery();
                 } else {
-                    // 単体でタップした場合はそのまま共有シートを開く
-                    openShareSheet([i]);
+                    // ★新設: 通常時はフルスクリーンプレビューを開く
+                    openPreview(i);
                 }
             };
             grid.appendChild(div);
         });
 
-        // UIの表示切り替え
         document.getElementById('toggle-select').innerText = isSelect ? 'キャンセル' : '選択';
         document.getElementById('select-bar').classList.toggle('hidden', !isSelect);
         document.getElementById('gallery-footer').classList.toggle('hidden', !isSelect);
@@ -245,47 +255,69 @@
         const countText = isSelect ? `${selected.size}枚選択中` : `${photoStack.length}枚`;
         document.getElementById('footer-info').innerText = countText;
 
-        // ボタンの有効/無効
         const hasSelection = selected.size > 0;
         document.getElementById('share-btn').style.opacity = hasSelection ? '1' : '0.3';
         document.getElementById('share-btn').style.pointerEvents = hasSelection ? 'auto' : 'none';
         document.getElementById('delete-btn').style.opacity = hasSelection ? '1' : '0.3';
         document.getElementById('delete-btn').style.pointerEvents = hasSelection ? 'auto' : 'none';
         
-        // 全選択ボタンのテキスト切り替え
         const allSelected = selected.size === photoStack.length && photoStack.length > 0;
         document.getElementById('select-all-btn').innerText = allSelected ? '全選択を解除' : '全選択';
     }
 
-    // ボタンイベント群
+    // --- プレビュー画面の制御 ---
+    function openPreview(index) {
+        currentPreviewIndex = index;
+        document.getElementById('preview-img').src = photoStack[index];
+        document.getElementById('preview-modal').style.display = 'flex';
+    }
+
+    document.getElementById('close-preview').onclick = () => {
+        document.getElementById('preview-modal').style.display = 'none';
+        currentPreviewIndex = -1;
+    };
+
+    document.getElementById('preview-delete-btn').onclick = () => {
+        if (confirm("この写真を削除しますか？")) {
+            photoStack.splice(currentPreviewIndex, 1);
+            updateThumb();
+            renderGallery();
+            document.getElementById('preview-modal').style.display = 'none';
+            // 写真が0になったらギャラリー自体も閉じる
+            if (photoStack.length === 0) {
+                document.getElementById('gallery-modal').style.display = 'none';
+            }
+        }
+    };
+
+    document.getElementById('preview-share-btn').onclick = () => {
+        openShareSheet([currentPreviewIndex]);
+    };
+
+    // --- 各種ボタンイベント ---
     document.getElementById('shutter').onclick = snap;
     document.getElementById('switch-camera').onclick = () => { front = !front; init(); };
     
-    // ギャラリーを開く・閉じる
     document.getElementById('gallery-wrapper').onclick = () => { 
+        if(photoStack.length === 0) return;
         isSelect = false; selected.clear(); renderGallery(); 
         document.getElementById('gallery-modal').style.display = 'flex'; 
     };
     document.getElementById('close-gallery').onclick = () => document.getElementById('gallery-modal').style.display = 'none';
 
-    // 選択切り替え
     document.getElementById('toggle-select').onclick = () => {
-        isSelect = !isSelect;
-        selected.clear();
-        renderGallery();
+        isSelect = !isSelect; selected.clear(); renderGallery();
     };
 
-    // 全選択
     document.getElementById('select-all-btn').onclick = () => {
         if (selected.size === photoStack.length) {
-            selected.clear(); // すべて解除
+            selected.clear();
         } else {
-            photoStack.forEach((_, i) => selected.add(i)); // すべて選択
+            photoStack.forEach((_, i) => selected.add(i));
         }
         renderGallery();
     };
 
-    // 削除
     document.getElementById('delete-btn').onclick = () => {
         if (confirm(`${selected.size}枚の写真を削除しますか？`)) {
             photoStack = photoStack.filter((_, i) => !selected.has(i));
@@ -294,15 +326,13 @@
             renderGallery();
             if (photoStack.length === 0) {
                 isSelect = false;
-                renderGallery();
+                document.getElementById('gallery-modal').style.display = 'none';
             }
         }
     };
 
-    // 選択分を共有・保存
     document.getElementById('share-btn').onclick = () => openShareSheet(Array.from(selected));
 
-    // 起動
     window.onload = init;
 </script>
 </body>
