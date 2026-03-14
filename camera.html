@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Pro Camera - Performance Fixed</title>
+    <title>Pro Camera</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         * { box-sizing: border-box; }
@@ -21,26 +21,23 @@
 
         .ui-layer { position: absolute; inset: 0; z-index: 10; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; }
         
+        /* 上部UI：デザイン維持 */
         .ui-top { 
             padding: max(env(safe-area-inset-top), 20px) 20px 0 20px; 
             pointer-events: auto; display: flex; justify-content: space-between; align-items: center; 
         }
 
-        /* ズームラベルの枠調整：文字が中央に来るように修正 */
+        /* ズームラベル：枠と文字の調整を維持 */
         #zoom-label { 
             background: rgba(0, 0, 0, 0.5); 
-            width: 60px;
-            height: 32px;
+            width: 60px; height: 32px;
             border-radius: 999px; 
-            font-size: 13px; 
-            font-weight: 700; 
+            font-size: 13px; font-weight: 700; 
             font-variant-numeric: tabular-nums;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            display: flex; align-items: center; justify-content: center;
             border: 1px solid rgba(255, 255, 255, 0.2);
             backdrop-filter: blur(10px);
-            padding-bottom: 1px; /* 微調整 */
+            padding-bottom: 1px;
         }
 
         .ui-bottom { padding: 0 24px max(env(safe-area-inset-bottom), 32px) 24px; pointer-events: auto; display: flex; justify-content: space-between; align-items: center; }
@@ -52,10 +49,25 @@
         #gallery-thumb img { width: 100%; height: 100%; object-fit: cover; }
         #stack-count { position: absolute; top: -6px; right: -6px; background: #ef4444; color: white; font-size: 11px; font-weight: bold; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; border-radius: 50%; border: 2px solid black; }
 
+        /* モーダル基本構造 */
         .modal { position: absolute; inset: 0; width: 100%; height: 100dvh; background: #000; z-index: 100; display: none; flex-direction: column; pointer-events: auto; }
-        .grid-container { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; overflow-y: scroll; -webkit-overflow-scrolling: touch; touch-action: pan-y; padding: 2px; align-content: start; flex-grow: 1; }
-        .grid-item { position: relative; width: 100%; aspect-ratio: 1; background: #111; overflow: hidden; }
+        
+        /* 重なりバグ修正済みのグリッドコンテナ */
+        .grid-container { 
+            display: grid; 
+            grid-template-columns: repeat(3, 1fr); 
+            gap: 2px; 
+            overflow-y: auto; 
+            -webkit-overflow-scrolling: touch; 
+            touch-action: pan-y; 
+            padding: 2px; 
+            flex-grow: 1;
+            align-content: start;
+        }
+        
+        .grid-item { position: relative; width: 100%; aspect-ratio: 1 / 1; background: #111; }
         .grid-item img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        
         .check-icon { position: absolute; bottom: 6px; right: 6px; width: 24px; height: 24px; background: #3b82f6; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; border: 2px solid white; font-size: 12px; }
 
         #preview-modal { z-index: 200; }
@@ -100,11 +112,13 @@
         </div>
         <button id="toggle-select" class="text-blue-400">選択</button>
     </div>
+    
     <div id="select-bar" class="bg-zinc-800 px-4 py-2 flex justify-between items-center hidden shrink-0">
         <button id="select-all-btn" class="text-blue-400 text-sm">全選択</button>
-        <span class="text-gray-500 text-[10px]">項目を選択</span>
     </div>
+
     <div id="gallery-grid" class="grid-container"></div>
+    
     <div id="gallery-footer" class="pb-8 pt-4 px-8 bg-zinc-900 flex justify-between items-center border-t border-white/10 hidden shrink-0">
         <button id="delete-btn" class="text-red-500 font-bold">削除</button>
         <button id="share-btn" class="text-blue-400 font-bold">共有・保存</button>
@@ -135,7 +149,7 @@
     const ctx = canvas.getContext('2d');
     const tCtx = thumbCanvas.getContext('2d');
     
-    let photoStack = []; // { original, preview, thumb } のオブジェクトを格納
+    let photoStack = []; // {original, preview, thumb} の3層構造
     let stream = null;
     let front = false;
     let zoom = 1.0;
@@ -175,7 +189,7 @@
         flash.style.opacity = 1;
         setTimeout(() => flash.style.opacity = 0, 50);
 
-        // 1. オリジナル最高画質をキャプチャ
+        // 1. オリジナル（最高画質）
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
         if (front) { ctx.translate(canvas.width, 0); ctx.scale(-1, 1); }
@@ -186,40 +200,31 @@
         ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
         const originalData = canvas.toDataURL('image/jpeg', 1.0);
 
-        // 2. プレビュー用（中画質: 横幅1200px程度）
-        thumbCanvas.width = 1200;
-        thumbCanvas.height = 1200 * (canvas.height / canvas.width);
+        // 2. プレビュー用（中画質）
+        thumbCanvas.width = 1000;
+        thumbCanvas.height = 1000 * (canvas.height / canvas.width);
         tCtx.drawImage(canvas, 0, 0, thumbCanvas.width, thumbCanvas.height);
         const previewData = thumbCanvas.toDataURL('image/jpeg', 0.8);
 
-        // 3. ギャラリー用（超軽量サムネイル: 200px程度）
+        // 3. ギャラリー用（超軽量サムネイル）
         thumbCanvas.width = 200;
         thumbCanvas.height = 200;
-        // 正方形にクロップして描画
         const minSize = Math.min(canvas.width, canvas.height);
         tCtx.drawImage(canvas, (canvas.width-minSize)/2, (canvas.height-minSize)/2, minSize, minSize, 0, 0, 200, 200);
-        const thumbData = thumbCanvas.toDataURL('image/jpeg', 0.6);
+        const thumbData = thumbCanvas.toDataURL('image/jpeg', 0.5);
 
-        photoStack.unshift({
-            original: originalData,
-            preview: previewData,
-            thumb: thumbData
-        });
-        
+        photoStack.unshift({ original: originalData, preview: previewData, thumb: thumbData });
         updateThumb();
     }
 
     function updateThumb() {
         const wrapper = document.getElementById('gallery-wrapper');
         if (photoStack.length > 0) {
-            wrapper.style.visibility = 'visible';
-            wrapper.style.opacity = '1';
-            wrapper.style.pointerEvents = 'auto';
+            wrapper.style.visibility = 'visible'; wrapper.style.opacity = '1'; wrapper.style.pointerEvents = 'auto';
             document.getElementById('thumb-img').src = photoStack[0].thumb;
             document.getElementById('stack-count').innerText = photoStack.length;
         } else {
-            wrapper.style.visibility = 'hidden';
-            wrapper.style.opacity = '0';
+            wrapper.style.visibility = 'hidden'; wrapper.style.opacity = '0';
         }
     }
 
@@ -231,7 +236,6 @@
             const isSel = selected.has(i);
             const div = document.createElement('div');
             div.className = 'grid-item';
-            // ギャラリーには超軽量な thumb を使用
             div.innerHTML = `<img src="${item.thumb}" loading="lazy">`;
             
             if (isSelect) {
@@ -256,15 +260,11 @@
         document.getElementById('select-bar').classList.toggle('hidden', !isSelect);
         document.getElementById('gallery-footer').classList.toggle('hidden', !isSelect);
         document.getElementById('footer-info').innerText = isSelect ? `${selected.size}枚選択中` : `${photoStack.length}枚`;
-        
-        // 全選択ボタンのテキスト切り替え
-        const allBtn = document.getElementById('select-all-btn');
-        allBtn.innerText = (selected.size === photoStack.length && photoStack.length > 0) ? '解除' : '全選択';
+        document.getElementById('select-all-btn').innerText = (selected.size === photoStack.length && photoStack.length > 0) ? '解除' : '全選択';
     }
 
     function openPreview(index) {
         currentPreviewIndex = index;
-        // プレビューには中画質な preview を使用
         document.getElementById('preview-img').src = photoStack[index].preview;
         document.getElementById('preview-modal').style.display = 'flex';
     }
@@ -272,7 +272,7 @@
     document.getElementById('close-preview').onclick = () => document.getElementById('preview-modal').style.display = 'none';
 
     document.getElementById('preview-delete-btn').onclick = () => {
-        if (confirm("写真を削除しますか？")) {
+        if (confirm("削除しますか？")) {
             photoStack.splice(currentPreviewIndex, 1);
             updateThumb(); renderGallery();
             document.getElementById('preview-modal').style.display = 'none';
@@ -284,7 +284,6 @@
         if (indices.length === 0) return;
         const files = [];
         for (let i of indices) {
-            // 保存・共有には最高画質の original を使用
             const b = await (await fetch(photoStack[i].original)).blob();
             files.push(new File([b], `IMG_${Date.now()}_${i}.jpg`, { type: "image/jpeg" }));
         }
@@ -300,13 +299,9 @@
     document.getElementById('close-gallery').onclick = () => document.getElementById('gallery-modal').style.display = 'none';
     document.getElementById('toggle-select').onclick = () => { isSelect = !isSelect; selected.clear(); renderGallery(); };
 
-    // 全選択ボタンのロジックを復活
     document.getElementById('select-all-btn').onclick = () => {
-        if (selected.size === photoStack.length) {
-            selected.clear();
-        } else {
-            photoStack.forEach((_, i) => selected.add(i));
-        }
+        if (selected.size === photoStack.length) selected.clear();
+        else photoStack.forEach((_, i) => selected.add(i));
         renderGallery();
     };
 
