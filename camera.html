@@ -280,11 +280,17 @@
         }
     };
 
+    // ★修正箇所：保存（共有）の順序を「古い順」に変更
     async function openShare(indices) {
         if (indices.length === 0) return;
+        
+        // インデックスを数値が大きい順（＝古い順）にソート
+        const sortedIndices = Array.from(indices).sort((a, b) => b - a);
+        
         const files = [];
-        for (let i of indices) {
+        for (let i of sortedIndices) {
             const b = await (await fetch(photoStack[i].original)).blob();
+            // ファイル名にインデックスを含めることで保存順序をより確実に制御
             files.push(new File([b], `IMG_${Date.now()}_${i}.jpg`, { type: "image/jpeg" }));
         }
         if (navigator.share) await navigator.share({ files });
